@@ -107,12 +107,14 @@ void VulkanDevice::getBestComputeQueue(const VkPhysicalDevice &physicalDevice) {
   // By default a max heap is created ordered by first element of pair.
   std::priority_queue<std::pair<int, int>> queueFamilyIndexes;
 
-  // Queue family priorities (larger numbers for higher priority)
-  // 4: supports compute operations and timestamps, does not support graphics
-  // operations 3: supports compute and graphics operations and timestamps 2:
-  // supports compute operations, does not supports timestamps nor graphics
-  // operations 1: supports compute and graphics operations, does not support
-  // timestamps 0: does not support compute operations
+  /*
+  Queue family priorities (larger numbers for higher priority)
+  4: supports compute ops and timestamps, does not support graphics ops
+  3: supports compute ops, graphics ops and timestamps
+  2: supports compute ops, does not supports timestamps or graphics ops
+  1: supports compute and graphics ops, does not support timestamps
+  0: does not support compute ops
+  */
 
   for (uint32_t i = 0; i < queueFamilyPropertiesCount; ++i) {
     const VkQueueFlags maskedFlags =
