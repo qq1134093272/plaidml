@@ -14,6 +14,7 @@
 #include "pmlc/rt/vulkan/vulkan_device.h"
 
 #include <memory>
+#include <queue>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -103,36 +104,50 @@ void VulkanDevice::getBestComputeQueue(const VkPhysicalDevice &physicalDevice) {
                                            &queueFamilyPropertiesCount,
                                            queueFamilyProperties.data());
 
-  // VK_QUEUE_COMPUTE_BIT specifies that queues in this queue family support
-  // compute operations.
-  for (uint32_t i = 0; i < queueFamilyPropertiesCount; ++i) {
-    const VkQueueFlags maskedFlags =
-        (~(VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT) &
-         queueFamilyProperties[i].queueFlags);
+  // By default a max heap is created ordered by first element of pair.
+  std::priority_queue<std::pair<int, int>> queueFamilyIndexes;
 
-    if (!(VK_QUEUE_GRAPHICS_BIT & maskedFlags) &&
-        (VK_QUEUE_COMPUTE_BIT & maskedFlags)) {
-      queueFamilyIndex = i;
-      // TODO: need to check if there is another queue that supports timestamps
-      timestampValidBits = queueFamilyProperties[i].timestampValidBits;
-      return;
-    }
-  }
+  // Queue family priorities (larger numbers for higher priority)
+  // 4: supports compute operations and timestamps, does not support graphics
+  // operations 3: supports compute and graphics operations and timestamps 2:
+  // supports compute operations, does not supports timestamps nor graphics
+  // operations 1: supports compute and graphics operations, does not support
+  // timestamps 0: does not support compute operations
 
   for (uint32_t i = 0; i < queueFamilyPropertiesCount; ++i) {
     const VkQueueFlags maskedFlags =
         (~(VK_QUEUE_TRANSFER_BIT | VK_QUEUE_SPARSE_BINDING_BIT) &
          queueFamilyProperties[i].queueFlags);
-
+    int queueFamilyPriority = 0;
     if (VK_QUEUE_COMPUTE_BIT & maskedFlags) {
-      queueFamilyIndex = i;
-      // TODO: need to check if there is another queue that supports timestamps
-      timestampValidBits = queueFamilyProperties[i].timestampValidBits;
-      return;
+      queueFamilyPriority++;
+      if (!(VK_QUEUE_GRAPHICS_BIT & maskedFlags)) {
+        queueFamilyPriority++;
+      }
+      if (queueFamilyProperties[i].timestampValidBits > 0) {
+        queueFamilyPriority += 2;
+      }
+      if (queueFamilyPriority == 4) {
+        queueFamilyIndex = i;
+        timestampValidBits = queueFamilyProperties[i].timestampValidBits;
+        return;
+      }
+      queueFamilyIndexes.push(std::make_pair(queueFamilyPriority, i));
     }
   }
 
-  throw std::runtime_error{"Cannot find a valid queue"};
+  if (queueFamilyIndexes.empty()) {
+    throw std::runtime_error{"Cannot find a valid queue"};
+  }
+  queueFamilyIndex = queueFamilyIndexes.top().second;
+  timestampValidBits =
+      queueFamilyProperties[queueFamilyIndex].timestampValidBits;
+  if (timestampValidBits > 0) {
+    IVLOG(1, "  Selected device queue family supports " << timestampValidBits
+                                                        << "-bit timestamps");
+  } else {
+    IVLOG(1, "  Selected device queue family does not supports timestamps");
+  }
 }
 
 } // namespace pmlc::rt::vulkan
